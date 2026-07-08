@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Half-Circle Dev Tool</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  html, body { height: 100%; margin: 0; padding: 0; font-family: sans-serif; }
+  body { display: flex; }
+  #map { flex: 1; height: 100vh; }
+  #panel {
+    width: 340px; background: #f8f9fa; padding: 20px; overflow-y: auto;
+    box-shadow: -2px 0 8px rgba(0,0,0,0.1); display: flex; flex-direction: column; gap: 16px;
+  }
+  #panel h2 { margin: 0 0 4px 0; font-size: 18px; }
+  #panel label { font-size: 14px; font-weight: 600; display: flex; flex-direction: column; gap: 4px; }
+  #panel input { padding: 6px 8px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; }
+  #panel input[type="range"] { padding: 0; }
+  #panel .value { font-weight: 400; color: #555; font-size: 13px; }
+  #panel .row { display: flex; gap: 8px; }
+  #panel .row label { flex: 1; }
+  #output {
+    background: #1e1e1e; color: #d4d4d4; padding: 12px; border-radius: 6px;
+    font-family: monospace; font-size: 13px; white-space: pre; overflow-x: auto;
+    margin-top: auto; user-select: all;
+  }
+  #panel .hint { font-size: 12px; color: #888; margin-top: -8px; }
+  .coord-input { font-family: monospace; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="panel">
+  <h2>Half-Circle Config</h2>
+  <div class="row">
+    <label>Latitude
+      <input id="latInput" type="number" step="0.000001" class="coord-input">
+    </label>
+    <label>Longitude
+      <input id="lngInput" type="number" step="0.000001" class="coord-input">
+    </label>
+  </div>
+  <label>Radius: <span id="radiusVal" class="value">800</span> m
+    <input id="radiusSlider" type="range" min="10" max="3000" value="225" step="5">
+  </label>
+  <label>Bearing: <span id="bearingVal" class="value">0</span>° (0=N, 90=E, 180=S, 270=W)
+    <input id="bearingSlider" type="range" min="0" max="359" value="68" step="1">
+  </label>
+  <div class="hint">Drag the <b>center marker</b> on the map to set position</div>
+  <div id="output"></div>
+</div>
+
+<script>
+const map = L.map('map', { zoomControl: false }).setView([58.321678, 15.159041], 14);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap',
+  maxZoom: 19
+}).addTo(map);
+
+// ---- state ----
+let centerLat = 58.321467;
+let centerLng = 15.159052;
+let radius = 225;
+let bearing = 68;
+const segments = 40;
+
+// ---- DOM refs ----
+const latInput = document.getElementById('latInput');
+const lngInput = document.getElementById('lngInput');
+const radiusSlider = document.getElementById('radiusSlider');
+const radiusVal = document.getElementById('radiusVal');
+const bearingSlider = document.getElementById('bearingSlider');
+const bearingVal = document.getElementById('bearingVal');
+const output = document.getElementById('output');
+
+// ---- half-circle generator ----
+function generateHalfCircle(lat, lng, r, b, seg) {
+  const R = 6371000;
+  const pts = [];
+  for (let i = 0; i <= seg; i++) {
+    const a = b - 90 + (180 / seg) * i;
+    const rad = a * Math.PI / 180;
+    const clat = lat + (r / R) * Math.cos(rad) * (180 / Math.PI);
+    const clng = lng + (r / R) * Math.sin(rad) * (180 / Math.PI) / Math.cos(lat * Math.PI / 180);
+    pts.push([clat, clng]);
+  }
+  pts.push([lat, lng]);
+  return pts;
+}
+
+// ---- map layers ----
+let polygonLayer = null;
+let centerMarker = null;
+function redraw() {
+  if (polygonLayer) map.removeLayer(polygonLayer);
+  const coords = generateHalfCircle(centerLat, centerLng, radius, bearing, segments);
+  polygonLayer = L.polygon(coords, {
+    color: '#dc3545', fillColor: '#dc3545', fillOpacity: 0.25, weight: 2.5
+  }).addTo(map);
+
+  if (centerMarker) map.removeLayer(centerMarker);
+  centerMarker = L.marker([centerLat, centerLng], {
+    draggable: true,
+    icon: L.divIcon({
+      className: '',
+      html: '<div style="width:18px;height:18px;background:#fff;border:3px solid #dc3545;border-radius:50%;"></div>',
+      iconSize: [18, 18], iconAnchor: [9, 9]
+    })
+  }).addTo(map);
+  centerMarker.on('dragend', () => {
+    const pos = centerMarker.getLatLng();
+    centerLat = pos.lat;
+    centerLng = pos.lng;
+    latInput.value = centerLat.toFixed(6);
+    lngInput.value = centerLng.toFixed(6);
+    redraw();
+    updateOutput();
+  });
+}
+
+function updateOutput() {
+  output.textContent =
+`centerLat = ${centerLat.toFixed(6)};
+centerLng = ${centerLng.toFixed(6)};
+radius = ${radius};
+bearing = ${bearing};`;
+}
+
+// ---- UI bindings ----
+latInput.value = centerLat.toFixed(6);
+lngInput.value = centerLng.toFixed(6);
+
+latInput.addEventListener('change', () => {
+  centerLat = parseFloat(latInput.value);
+  centerMarker && centerMarker.setLatLng([centerLat, centerLng]);
+  redraw();
+  updateOutput();
+});
+lngInput.addEventListener('change', () => {
+  centerLng = parseFloat(lngInput.value);
+  centerMarker && centerMarker.setLatLng([centerLat, centerLng]);
+  redraw();
+  updateOutput();
+});
+
+radiusSlider.addEventListener('input', () => {
+  radius = parseInt(radiusSlider.value);
+  radiusVal.textContent = radius;
+  redraw();
+  updateOutput();
+});
+bearingSlider.addEventListener('input', () => {
+  bearing = parseInt(bearingSlider.value);
+  bearingVal.textContent = bearing;
+  redraw();
+  updateOutput();
+});
+
+redraw();
+updateOutput();
+</script>
+</body>
+</html>

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Contamination Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  html, body { height: 100%; margin: 0; padding: 0; font-family: sans-serif; }
+  #map { height: 100vh; width: 100%; }
+  .status-bar {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    z-index: 1000; padding: 12px 24px; border-radius: 8px; font-size: 16px; font-weight: bold;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3); pointer-events: none; text-align: center;
+  }
+  .status-inside { background: #dc3545; color: #fff; }
+  .status-outside { background: #28a745; color: #fff; }
+  .status-pending { background: #ffc107; color: #333; }
+  .status-error { background: #6c757d; color: #fff; }
+  .coords {
+    position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+    z-index: 1000; background: rgba(0,0,0,0.7); color: #fff; padding: 6px 14px;
+    border-radius: 20px; font-size: 13px; pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="status" class="status-bar status-pending">Acquiring GPS position...</div>
+<div id="coords" class="coords"></div>
+
+<script>
+const map = L.map('map').setView([59.3293, 18.0686], 13);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  maxZoom: 19
+}).addTo(map);
+
+// Define contaminated area — half-circle in Mjölby
+// Center: Mjölby centrum, radius: 800m, opening toward north
+const centerLat = 58.321467, centerLng = 15.159052;
+const radiusMeters = 225;
+const bearingDeg = 68;
+
+function generateHalfCircle(centerLat, centerLng, radius, bearing, segments) {
+  const R = 6371000;
+  const points = [];
+  // half-circle spans 180 degrees, centered on the given bearing
+  for (let i = 0; i <= segments; i++) {
+    const angle = bearing - 90 + (180 / segments) * i;
+    const rad = angle * Math.PI / 180;
+    const lat = centerLat + (radius / R) * Math.cos(rad) * (180 / Math.PI);
+    const lng = centerLng + (radius / R) * Math.sin(rad) * (180 / Math.PI) / Math.cos(centerLat * Math.PI / 180);
+    points.push([lat, lng]);
+  }
+  // close back to center
+  points.push([centerLat, centerLng]);
+  return points;
+}
+
+const areaCoords = generateHalfCircle(centerLat, centerLng, radiusMeters, bearingDeg, 40);
+
+const contaminationPolygon = L.polygon(areaCoords, {
+  color: '#dc3545',
+  fillColor: '#dc3545',
+  fillOpacity: 0.25,
+  weight: 2.5
+}).addTo(map);
+
+map.setView([centerLat, centerLng], 14);
+
+function pointInPolygon(lat, lng, polygon) {
+  let inside = false;
+  const n = polygon.length;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const xi = polygon[i][1], yi = polygon[i][0];
+    const xj = polygon[j][1], yj = polygon[j][0];
+    if ((yi > lat) !== (yj > lat) && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+let userMarker = null;
+let userCircle = null;
+
+function updatePosition(pos) {
+  const { latitude, accuracy } = pos.coords;
+  const { longitude } = pos.coords;
+  const inside = pointInPolygon(latitude, longitude, areaCoords);
+
+  const statusEl = document.getElementById('status');
+  const coordsEl = document.getElementById('coords');
+
+  statusEl.textContent = inside ? 'YOU ARE INSIDE THE CONTAMINATED AREA' : 'You are outside the contaminated area';
+  statusEl.className = 'status-bar ' + (inside ? 'status-inside' : 'status-outside');
+
+  coordsEl.textContent = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}  ±${accuracy.toFixed(0)}m`;
+
+  if (userMarker) map.removeLayer(userMarker);
+  if (userCircle) map.removeLayer(userCircle);
+
+  const iconColor = inside ? '#dc3545' : '#28a745';
+  userMarker = L.marker([latitude, longitude], {
+    icon: L.divIcon({
+      className: '',
+      html: `<div style="width:20px;height:20px;background:${iconColor};border:3px solid #fff;border-radius:50%;box-shadow:0 0 6px rgba(0,0,0,0.4);"></div>`,
+      iconSize: [20, 20],
+      iconAnchor: [10, 10]
+    })
+  }).addTo(map);
+
+  userCircle = L.circle([latitude, longitude], {
+    radius: accuracy,
+    color: iconColor,
+    fillColor: iconColor,
+    fillOpacity: 0.1,
+    weight: 1.5
+  }).addTo(map);
+}
+
+function handleError(err) {
+  const statusEl = document.getElementById('status');
+  statusEl.textContent = 'Could not get GPS position: ' + err.message;
+  statusEl.className = 'status-bar status-error';
+}
+
+
+
+if ('geolocation' in navigator) {
+  navigator.geolocation.watchPosition(updatePosition, handleError, {
+    enableHighAccuracy: true,
+    timeout: 15000,
+    maximumAge: 5000
+  });
+} else {
+  document.getElementById('status').textContent = 'Geolocation is not supported by this browser';
+  document.getElementById('status').className = 'status-bar status-error';
+}
+</script>
+</body>
+</html>
