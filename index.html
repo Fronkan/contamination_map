@@ -33,10 +33,19 @@
 <script>
 const map = L.map('map').setView([59.3293, 18.0686], 13);
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
   maxZoom: 19
-}).addTo(map);
+});
+
+const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  attribution: '&copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+  maxZoom: 19
+});
+
+osm.addTo(map);
+
+L.control.layers({ 'OpenStreetMap': osm, 'Satellite': satellite }).addTo(map);
 
 // Half-circle contaminated zone centered on an old shooting range ("lerduveskytte")
 const centerLat = 58.321467, centerLng = 15.159052;
