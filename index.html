@@ -38,8 +38,7 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19
 }).addTo(map);
 
-// Define contaminated area — half-circle in Mjölby
-// Center: Mjölby centrum, radius: 800m, opening toward north
+// Half-circle contaminated zone centered on an old shooting range ("lerduveskytte")
 const centerLat = 58.321467, centerLng = 15.159052;
 const radiusMeters = 225;
 const bearingDeg = 68;
@@ -47,7 +46,6 @@ const bearingDeg = 68;
 function generateHalfCircle(centerLat, centerLng, radius, bearing, segments) {
   const R = 6371000;
   const points = [];
-  // half-circle spans 180 degrees, centered on the given bearing
   for (let i = 0; i <= segments; i++) {
     const angle = bearing - 90 + (180 / segments) * i;
     const rad = angle * Math.PI / 180;
@@ -55,7 +53,6 @@ function generateHalfCircle(centerLat, centerLng, radius, bearing, segments) {
     const lng = centerLng + (radius / R) * Math.sin(rad) * (180 / Math.PI) / Math.cos(centerLat * Math.PI / 180);
     points.push([lat, lng]);
   }
-  // close back to center
   points.push([centerLat, centerLng]);
   return points;
 }
