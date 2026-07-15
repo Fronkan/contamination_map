@@ -17,6 +17,7 @@
   .status-inside { background: #dc3545; color: #fff; }
   .status-outside { background: #28a745; color: #fff; }
   .status-pending { background: #ffc107; color: #333; }
+  .status-maybe { background: #fd7e14; color: #fff; }
   .status-error { background: #6c757d; color: #fff; }
   .coords {
     position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
@@ -93,23 +94,47 @@ function pointInPolygon(lat, lng, polygon) {
 let userMarker = null;
 let userCircle = null;
 
+function uncertaintyOverlapsZone(lat, lng, accuracy, polygon) {
+  const samples = 12;
+  for (let i = 0; i < samples; i++) {
+    const angle = (360 / samples) * i * Math.PI / 180;
+    const dlat = (accuracy / 6371000) * Math.cos(angle) * (180 / Math.PI);
+    const dlng = (accuracy / 6371000) * Math.sin(angle) * (180 / Math.PI) / Math.cos(lat * Math.PI / 180);
+    if (pointInPolygon(lat + dlat, lng + dlng, polygon)) return true;
+  }
+  return false;
+}
+
 function updatePosition(pos) {
   const { latitude, accuracy } = pos.coords;
   const { longitude } = pos.coords;
   const inside = pointInPolygon(latitude, longitude, areaCoords);
+  const mightBeInside = !inside && uncertaintyOverlapsZone(latitude, longitude, accuracy, areaCoords);
 
   const statusEl = document.getElementById('status');
   const coordsEl = document.getElementById('coords');
 
-  statusEl.textContent = inside ? 'YOU ARE INSIDE THE CONTAMINATED AREA' : 'You are outside the contaminated area';
-  statusEl.className = 'status-bar ' + (inside ? 'status-inside' : 'status-outside');
+  let statusText, statusClass;
+  if (inside) {
+    statusText = 'YOU ARE INSIDE THE CONTAMINATED AREA';
+    statusClass = 'status-inside';
+  } else if (mightBeInside) {
+    statusText = 'You might be inside the contaminated area (GPS uncertainty overlaps the zone)';
+    statusClass = 'status-maybe';
+  } else {
+    statusText = 'You are outside the contaminated area';
+    statusClass = 'status-outside';
+  }
+
+  statusEl.textContent = statusText;
+  statusEl.className = 'status-bar ' + statusClass;
 
   coordsEl.textContent = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}  ±${accuracy.toFixed(0)}m`;
 
   if (userMarker) map.removeLayer(userMarker);
   if (userCircle) map.removeLayer(userCircle);
 
-  const iconColor = inside ? '#dc3545' : '#28a745';
+  const iconColor = inside ? '#dc3545' : mightBeInside ? '#ffc107' : '#28a745';
   userMarker = L.marker([latitude, longitude], {
     icon: L.divIcon({
       className: '',
