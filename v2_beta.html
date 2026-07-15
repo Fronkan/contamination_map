@@ -429,10 +429,17 @@ const translations = {
     document.querySelectorAll('.lang-btn').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.lang === lang);
     });
+    updateUIForCurrentLang();
   };
 })();
 
 let currentLang = 'sv';
+let lastPositionData = null;
+let lastError = null;
+
+// Shorthand translate helper
+function t(sv, en) { return currentLang === 'sv' ? sv : en; }
+
 document.querySelectorAll('.lang-btn').forEach(btn => {
   btn.addEventListener('click', () => setLang(btn.dataset.lang));
 });
@@ -504,6 +511,7 @@ function uncertaintyOverlapsZone(lat, lng, accuracy, polygon) {
 let userMarker = null, userCircle = null;
 
 function updatePosition(pos) {
+  lastPositionData = pos; lastError = null;
   const { latitude, longitude, accuracy } = pos.coords;
   const inside = pointInPolygon(latitude, longitude, areaCoords);
   const mightBeInside = !inside && uncertaintyOverlapsZone(latitude, longitude, accuracy, areaCoords);
@@ -518,22 +526,25 @@ function updatePosition(pos) {
   const deskSub = document.getElementById('desktopStatusSub');
 
 
-  let dCls, dLabel, dSub, bCls, bLabel;
+  let dCls, dLabel, dSub, bCls, bLabel, mCls;
   if (inside) {
     dCls = 'status-inside';
-    dLabel = currentLang === 'sv' ? 'DU ÄR INNANFÖR DET FÖRORENADE OMRÅDET' : 'YOU ARE INSIDE THE CONTAMINATED AREA';
-    dSub = currentLang === 'sv' ? 'Du befinner dig i zonen. Undvik att gräva eller odla här.' : 'You are in the zone. Avoid digging or gardening here.';
+    dLabel = t('DU ÄR INNANFÖR DET FÖRORENADE OMRÅDET', 'YOU ARE INSIDE THE CONTAMINATED AREA');
+    dSub = t('Du befinner dig i zonen. Undvik att gräva eller odla här.', 'You are in the zone. Avoid digging or gardening here.');
     bCls = 'fb-inside'; bLabel = dLabel;
+    mCls = 'msi-inside';
   } else if (mightBeInside) {
     dCls = 'status-maybe';
-    dLabel = currentLang === 'sv' ? 'Du kan vara innanför området' : 'You might be inside the area';
-    dSub = currentLang === 'sv' ? 'GPS-osäkerheten nuddar zonen. Förflytta dig för en säkrare läsning.' : 'GPS uncertainty touches the zone. Move for a more reliable reading.';
+    dLabel = t('Du kan vara innanför området', 'You might be inside the area');
+    dSub = t('GPS-osäkerheten nuddar zonen. Förflytta dig för en säkrare läsning.', 'GPS uncertainty touches the zone. Move for a more reliable reading.');
     bCls = 'fb-maybe'; bLabel = dLabel;
+    mCls = 'msi-maybe';
   } else {
     dCls = 'status-outside';
-    dLabel = currentLang === 'sv' ? 'Du är utanför det förorenade området' : 'You are outside the contaminated area';
-    dSub = currentLang === 'sv' ? 'Din position är utanför zonen med god marginal.' : 'Your position is safely outside the zone.';
+    dLabel = t('Du är utanför det förorenade området', 'You are outside the contaminated area');
+    dSub = t('Din position är utanför zonen med god marginal.', 'Your position is safely outside the zone.');
     bCls = 'fb-outside'; bLabel = dLabel;
+    mCls = 'msi-outside';
   }
   banner.className = bCls;
   banner.textContent = bLabel;
@@ -541,22 +552,10 @@ function updatePosition(pos) {
   deskCard.querySelector('.l10n').textContent = dLabel;
   deskSub.textContent = dSub;
 
-  // --- Update mobile UI ---
+  // --- Update mobile UI (same text as desktop) ---
   const mInline = document.getElementById('mobile-status-inline');
-
-  let mCls, mLbl;
-  if (inside) {
-    mCls = 'msi-inside';
-    mLbl = currentLang === 'sv' ? '🔴 Du är INNANFÖR det förorenade området' : '🔴 You are INSIDE the contaminated area';
-  } else if (mightBeInside) {
-    mCls = 'msi-maybe';
-    mLbl = currentLang === 'sv' ? '⚠️ Du kan vara innanför området' : '⚠️ You might be inside the area';
-  } else {
-    mCls = 'msi-outside';
-    mLbl = currentLang === 'sv' ? '🟢 Du är utanför det förorenade området' : '🟢 You are outside the contaminated area';
-  }
   mInline.className = mCls;
-  document.getElementById('msi-text').textContent = mLbl;
+  document.getElementById('msi-text').textContent = dLabel;
 
   // --- Update map markers ---
   if (userMarker) map.removeLayer(userMarker);
@@ -571,7 +570,8 @@ function updatePosition(pos) {
 }
 
 function handleError(err) {
-  const msg = (currentLang === 'sv' ? 'Kunde inte hämta GPS-position: ' : 'Could not get GPS position: ') + err.message;
+  lastError = err; lastPositionData = null;
+  const msg = t('Kunde inte hämta GPS-position: ', 'Could not get GPS position: ') + err.message;
 
   const banner = document.getElementById('float-banner');
   banner.className = 'fb-pending';
@@ -588,11 +588,45 @@ function handleError(err) {
 if ('geolocation' in navigator) {
   navigator.geolocation.watchPosition(updatePosition, handleError, { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 });
 } else {
-  const msg = currentLang === 'sv' ? 'Geolokalisering stöds inte i denna webbläsare' : 'Geolocation is not supported by this browser';
+  const msg = t('Geolokalisering stöds inte i denna webbläsare', 'Geolocation is not supported by this browser');
   document.getElementById('float-banner').textContent = msg;
   document.querySelector('#desktopStatusCard .l10n').textContent = msg;
   document.getElementById('msi-text').textContent = msg;
 }
+
+// =============================================
+// Re-evaluate dynamic status UI for current language
+// =============================================
+function updateUIForCurrentLang() {
+  if (lastPositionData) {
+    updatePosition(lastPositionData);
+  } else if (lastError) {
+    handleError(lastError);
+  } else {
+    // Pending state — no position yet
+    const pendingText = t('Söker efter GPS-position...', 'Searching for GPS position...');
+    const banner = document.getElementById('float-banner');
+    banner.className = 'fb-pending';
+    banner.textContent = pendingText;
+
+    const deskCard = document.getElementById('desktopStatusCard');
+    if (deskCard) {
+      deskCard.className = 'status-card status-pending';
+      const label = deskCard.querySelector('.l10n');
+      if (label) label.textContent = pendingText;
+    }
+
+    const msi = document.getElementById('mobile-status-inline');
+    if (msi) {
+      msi.className = 'msi-pending';
+      const msiText = document.getElementById('msi-text');
+      if (msiText) msiText.textContent = pendingText;
+    }
+  }
+}
+
+// Sync the initial pending state with the current language
+updateUIForCurrentLang();
 </script>
 </body>
 </html>
