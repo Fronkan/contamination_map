@@ -247,6 +247,11 @@
     #map-wrapper { height: 100vh; width: 100%; }
     #float-banner { display: none; }
     #bottom-sheet { display: flex; }
+
+    #map.attribution-visible .leaflet-bottom {
+      bottom: 65px;
+      z-index: 1001;
+    }
   }
 </style>
 </head>
@@ -456,8 +461,8 @@ const handle = document.getElementById('sheet-handle');
 const toggleBtn = document.getElementById('toggleSheet');
 let sheetExpanded = false;
 
-function expandSheet() { sheetExpanded = true; sheet.classList.add('expanded'); toggleBtn.textContent = '🔽'; }
-function collapseSheet() { sheetExpanded = false; sheet.classList.remove('expanded'); toggleBtn.textContent = '🔼'; }
+function expandSheet() { sheetExpanded = true; sheet.classList.add('expanded'); toggleBtn.textContent = '🔽'; map.getContainer().classList.remove('attribution-visible'); }
+function collapseSheet() { sheetExpanded = false; sheet.classList.remove('expanded'); toggleBtn.textContent = '🔼'; map.getContainer().classList.add('attribution-visible'); }
 handle.addEventListener('click', () => sheetExpanded ? collapseSheet() : expandSheet());
 toggleBtn.addEventListener('click', (e) => { e.stopPropagation(); sheetExpanded ? collapseSheet() : expandSheet(); });
 
@@ -473,6 +478,10 @@ const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/servi
 });
 osm.addTo(map);
 L.control.layers({ 'OpenStreetMap': osm, 'Satellite': satellite }).addTo(map);
+
+if (window.innerWidth <= 815) {
+  map.getContainer().classList.add('attribution-visible');
+}
 
 // ---- Zone ----
 const centerLat = 58.321467, centerLng = 15.159052, radiusMeters = 225, bearingDeg = 68;
