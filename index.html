@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="sv">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,97 +7,498 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
-  html, body { height: 100%; margin: 0; padding: 0; font-family: sans-serif; }
-  #map { height: 100vh; width: 100%; }
-  .status-bar {
-    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
-    z-index: 1000; padding: 12px 24px; border-radius: 8px; font-size: 16px; font-weight: bold;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.3); pointer-events: none; text-align: center;
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; }
+  
+  /* =============================================
+     Map always fills the viewport
+     ============================================= */
+  #map-wrapper { position: relative; height: 100vh; width: 100%; overflow: hidden; }
+  #map { height: 100%; width: 100%; }
+  #float-banner {
+    position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+    z-index: 9999; padding: 10px 24px; border-radius: 10px;
+    font-size: 15px; font-weight: 700;
+    box-shadow: 0 3px 12px rgba(0,0,0,0.25);
+    pointer-events: none; text-align: center;
+    white-space: nowrap;
+    transition: background 0.3s, color 0.3s;
   }
-  .status-inside { background: #dc3545; color: #fff; }
-  .status-outside { background: #28a745; color: #fff; }
-  .status-pending { background: #ffc107; color: #333; }
-  .status-maybe { background: #fd7e14; color: #fff; }
-  .status-error { background: #6c757d; color: #fff; }
-  .coords {
-    position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
-    z-index: 1000; background: rgba(0,0,0,0.7); color: #fff; padding: 6px 14px;
-    border-radius: 20px; font-size: 13px; pointer-events: none;
+  #float-banner.fb-inside { background: #c5221f; color: #fff; }
+  #float-banner.fb-outside { background: #137333; color: #fff; }
+  #float-banner.fb-maybe { background: #b06000; color: #fff; }
+  #float-banner.fb-pending { background: #f0f0f0; color: #666; box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
+
+  /* =============================================
+     DESKTOP (>768px) — Sidebar (A)
+     ============================================= */
+  #sidebar-desktop {
+    display: none;
+  }
+
+  #sidebar {
+    width: 380px; background: #fff; overflow-y: auto;
+    box-shadow: -2px 0 12px rgba(0,0,0,0.12);
+    display: flex; flex-direction: column;
+    font-size: 14px; line-height: 1.5;
+    position: relative; z-index: 10;
+    flex-shrink: 0;
+  }
+  #sidebar-header {
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid #e0e0e0;
+    background: #fafafa;
+  }
+  #sidebar-header h1 {
+    margin: 0; font-size: 20px; font-weight: 700;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  #sidebar-header p { margin: 6px 0 0 0; color: #555; font-size: 13px; }
+  .desktop-lang-bar {
+    display: flex; justify-content: flex-end; padding: 6px 24px;
+    background: #fff; border-bottom: 1px solid #eee; gap: 4px;
+  }
+  .desktop-lang-bar button {
+    background: none; border: 1px solid #ccc; border-radius: 4px;
+    padding: 4px 12px; font-size: 12px; cursor: pointer; color: #555;
+  }
+  .desktop-lang-bar button:hover { background: #f0f0f0; }
+  .desktop-lang-bar button.active { background: #1a73e8; color: #fff; border-color: #1a73e8; }
+
+  .section {
+    padding: 16px 24px;
+    border-bottom: 1px solid #eee;
+  }
+  .section:last-of-type { border-bottom: none; }
+  .section h2 {
+    margin: 0 0 8px 0; font-size: 15px; font-weight: 600;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .section h2 .icon { font-size: 18px; }
+  .section p { margin: 0 0 6px 0; color: #333; }
+  .section p:last-child { margin-bottom: 0; }
+  .section .small { font-size: 12px; color: #888; }
+  .section a { color: #1a73e8; text-decoration: underline; }
+  .section a:hover { color: #1557b0; }
+  .section .tag {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 11px; font-weight: 600; margin-right: 4px;
+  }
+  .tag-source { background: #e8f0fe; color: #1a73e8; }
+
+  .certainty-meter { display: flex; gap: 4px; margin: 8px 0; }
+  .certainty-meter .bar { height: 6px; border-radius: 3px; flex: 1; }
+  .bar-good { background: #28a745; }
+  .bar-medium { background: #ffc107; }
+  .bar-poor { background: #dc3545; }
+
+
+
+  .status-card {
+    padding: 12px 16px; border-radius: 8px; margin: 8px 0;
+    font-weight: 600; font-size: 14px;
+  }
+  .status-inside { background: #fce8e6; color: #c5221f; border-left: 4px solid #c5221f; }
+  .status-outside { background: #e6f4ea; color: #137333; border-left: 4px solid #137333; }
+  .status-maybe { background: #fef7e0; color: #b06000; border-left: 4px solid #b06000; }
+  .status-pending { background: #f0f0f0; color: #666; border-left: 4px solid #999; }
+  .status-sub { font-weight: 400; font-size: 12px; margin-top: 4px; }
+
+  .legend-row { display: flex; align-items: center; gap: 10px; margin: 4px 0; font-size: 13px; }
+  .legend-swatch { width: 24px; height: 14px; border-radius: 3px; flex-shrink: 0; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; border: 2px solid #fff; box-shadow: 0 0 3px rgba(0,0,0,0.3); }
+
+  #sidebar-footer {
+    padding: 12px 24px; background: #fafafa; border-top: 1px solid #e0e0e0;
+    font-size: 11px; color: #999; margin-top: auto;
+  }
+
+  .collapsible { cursor: pointer; user-select: none; }
+  .collapsible::after { content: ' ▾'; font-size: 11px; color: #999; }
+  .collapsible.open::after { content: ' ▴'; }
+  .collapsible-content { display: none; margin-top: 8px; }
+  .collapsible-content.open { display: block; }
+
+  /* =============================================
+     MOBILE (≤768px) — Bottom Sheet (C)
+     ============================================= */
+  .sheet-lang {
+    display: flex; gap: 3px; margin-left: auto; margin-right: 8px;
+  }
+  .sheet-lang button {
+    background: none; border: 1px solid #ddd; border-radius: 10px;
+    padding: 2px 8px; font-size: 10px; cursor: pointer; color: #888;
+  }
+  .sheet-lang button.active { background: #1a73e8; color: #fff; border-color: #1a73e8; }
+  .sheet-lang button:hover:not(.active) { background: #f0f0f0; }
+
+  #bottom-sheet {
+    display: none;
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 1000;
+    background: rgba(255,255,255,0.96); backdrop-filter: blur(12px);
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+    max-height: 75vh;
+    flex-direction: column;
+    transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+    transform: translateY(calc(100% - 60px));
+  }
+  #bottom-sheet.expanded { transform: translateY(0); }
+
+  #sheet-handle {
+    width: 100%; padding: 6px 12px 6px; cursor: pointer; user-select: none;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    flex-shrink: 0;
+  }
+  #sheet-handle .bar { width: 32px; height: 4px; border-radius: 2px; background: #ccc; transition: background 0.2s; flex-shrink: 0; }
+  #sheet-handle:hover .bar { background: #aaa; }
+  #mobile-status-inline {
+    width: 100%; padding: 8px 14px; border-radius: 8px;
+    font-weight: 700; font-size: 13px; text-align: center;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  #mobile-status-inline .expand-hint { font-size: 11px; opacity: 0.6; }
+  #mobile-status-inline.msi-inside { background: #c5221f; color: #fff; }
+  #mobile-status-inline.msi-outside { background: #137333; color: #fff; }
+  #mobile-status-inline.msi-maybe { background: #b06000; color: #fff; }
+  #mobile-status-inline.msi-pending { background: #f0f0f0; color: #666; }
+
+  .title-row {
+    display: flex; justify-content: space-between; align-items: center; width: 100%;
+  }
+  #sheet-handle .title-row h2 {
+    margin: 0; font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 6px;
+  }
+
+  #sheet-handle .title-row .toggle-btn {
+    background: none; border: none; font-size: 18px; cursor: pointer; color: #888; padding: 0 2px;
+  }
+
+
+
+  #sheet-body { overflow-y: hidden; padding: 0 20px 16px; flex: 1; }
+
+  .status-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px; border-radius: 12px; margin-bottom: 12px;
+    font-weight: 600; font-size: 15px;
+  }
+  .status-row .status-icon { font-size: 24px; }
+  .status-row .status-text { flex: 1; }
+  .status-row .status-sub { font-weight: 400; font-size: 12px; color: inherit; opacity: 0.7; display: block; margin-top: 2px; }
+  .sr-inside { background: #fce8e6; color: #c5221f; }
+  .sr-outside { background: #e6f4ea; color: #137333; }
+  .sr-maybe { background: #fef7e0; color: #b06000; }
+  .sr-pending { background: #f0f0f0; color: #666; }
+
+
+
+  .info-section { margin-bottom: 10px; }
+  .info-section .section-header {
+    font-weight: 600; font-size: 13px; cursor: pointer; user-select: none;
+    padding: 6px 0; display: flex; align-items: center; gap: 6px;
+    border-bottom: 1px solid #eee;
+  }
+  .info-section .section-header::after { content: '▾'; margin-left: auto; font-size: 10px; color: #aaa; transition: transform 0.2s; }
+  .info-section .section-header.open::after { transform: rotate(180deg); }
+  .info-section .section-body { display: none; padding: 8px 0 4px; font-size: 13px; color: #444; line-height: 1.5; }
+  .info-section .section-body.open { display: block; }
+  .info-section p { margin: 0 0 6px 0; }
+  .info-section p:last-child { margin-bottom: 0; }
+  .info-section a { color: #1a73e8; text-decoration: underline; }
+  .info-section a:hover { color: #1557b0; }
+
+  .legend-mini { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
+  .legend-mini-item { display: flex; align-items: center; gap: 4px; font-size: 12px; }
+  .lm-swatch { width: 14px; height: 8px; border-radius: 2px; border: 1px solid rgba(0,0,0,0.1); }
+  .lm-dot { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid #fff; box-shadow: 0 0 2px rgba(0,0,0,0.2); }
+
+  .gauge-mini { display: flex; gap: 3px; margin: 4px 0; }
+  .gauge-mini .gbar { height: 4px; border-radius: 2px; flex: 1; }
+  .gbar-green { background: #28a745; }
+  .gbar-yellow { background: #ffc107; }
+  .gbar-red { background: #dc3545; }
+
+  .mobile-footer { font-size: 10px; color: #bbb; text-align: center; padding: 8px 0 4px; }
+  .mobile-footer a { color: #1a73e8; text-decoration: underline; font-weight: 600; }
+  .mobile-footer a:hover { color: #1557b0; }
+  #sidebar-footer a { color: #1a73e8; text-decoration: underline; font-weight: 600; }
+  #sidebar-footer a:hover { color: #1557b0; }
+
+  /* =============================================
+     RESPONSIVE BREAKPOINT
+     ============================================= */
+  @media (min-width: 816px) {
+    #sidebar-desktop {
+      display: flex; flex-direction: column;
+      position: fixed; top: 0; right: 0; bottom: 0;
+      width: 380px; z-index: 10;
+      background: #fff; box-shadow: -2px 0 12px rgba(0,0,0,0.12);
+      overflow-y: auto;
+    }
+    #map-wrapper { width: calc(100% - 380px); }
+    #float-banner { display: block; }
+    #bottom-sheet { display: none !important; }
+  }
+
+  @media (max-width: 815px) {
+    #sidebar-desktop { display: none !important; }
+    #map-wrapper { height: 100vh; width: 100%; }
+    #float-banner { display: none; }
+    #bottom-sheet { display: flex; }
   }
 </style>
 </head>
 <body>
-<div id="map"></div>
-<div id="status" class="status-bar status-pending">Acquiring GPS position...</div>
-<div id="coords" class="coords"></div>
+
+<!-- ======== DESKTOP VIEW (≥769px) ======== -->
+<div id="sidebar-desktop">
+    <div class="desktop-lang-bar">
+      <button class="lang-btn active" data-lang="sv">🇸🇪 Svenska</button>
+      <button class="lang-btn" data-lang="en">🇬🇧 English</button>
+    </div>
+
+    <div id="sidebar-header">
+      <h1><span class="l10n" data-key="app-title"></span></h1>
+      <p class="l10n" data-key="app-subtitle"></p>
+    </div>
+
+    <div class="section">
+      <h2><span class="icon">📍</span> <span class="l10n" data-key="your-position"></span></h2>
+      <div id="desktopStatusCard" class="status-card status-pending">
+        <span class="l10n"></span>
+        <div class="status-sub" id="desktopStatusSub"></div>
+      </div>
+
+    </div>
+
+    <div class="section">
+      <h2 class="collapsible open" onclick="toggleSection(this)"><span class="icon">ℹ️</span> <span class="l10n" data-key="about-heading"></span></h2>
+      <div class="collapsible-content open">
+        <p class="l10n" data-key="about-text"></p>
+        <p class="l10n" data-key="about-uncertainty" style="font-weight:500;"></p>
+        <p class="l10n" data-key="about-freely"></p>
+        <p><a class="l10n" data-key="about-source-link" href="https://www.mjolby.se/bygga-bo-miljo/samhallsutveckling/aktuella-och-pagaende-projekt/fororenad-mark-utreds-vid-bockarp" target="_blank" rel="noopener"></a></p>
+      </div>
+    </div>
+
+
+
+
+
+    <div class="section">
+      <h2><span class="icon">🗺️</span> <span class="l10n" data-key="legend-heading"></span></h2>
+      <div class="legend-row">
+        <div class="legend-swatch" style="background:#dc3545;opacity:0.3;border:2px solid #dc3545;"></div>
+        <span class="l10n" data-key="legend-zone"></span>
+      </div>
+      <div class="legend-row">
+        <div class="legend-dot" style="background:#dc3545;"></div>
+        <span class="l10n" data-key="legend-inside"></span>
+      </div>
+      <div class="legend-row">
+        <div class="legend-dot" style="background:#28a745;"></div>
+        <span class="l10n" data-key="legend-outside"></span>
+      </div>
+      <div class="legend-row">
+        <div class="legend-dot" style="background:#ffc107;"></div>
+        <span class="l10n" data-key="legend-maybe"></span>
+      </div>
+      <div class="legend-row" style="margin-top:4px;">
+        <div style="width:20px;height:20px;border-radius:50%;border:2px dashed #dc3545;flex-shrink:0;"></div>
+        <span class="small l10n" data-key="legend-gps-circle"></span>
+      </div>
+    </div>
+
+    <div id="sidebar-footer">
+      <p style="margin:0;font-size:13px;font-weight:600;"><a class="l10n" data-key="github-link" href="https://github.com/Fronkan/contamination_map" target="_blank" rel="noopener"></a></p>
+    </div>
+  </div>
+
+<div id="map-wrapper">
+  <div id="map"></div>
+  <div id="float-banner" class="fb-pending">Söker efter GPS-position...</div>
+</div>
+
+<!-- ======== MOBILE VIEW (≤768px) ======== -->
+
+<div id="bottom-sheet">
+  <div id="sheet-handle">
+    <div class="bar"></div>
+    <div id="mobile-status-inline" class="msi-pending">
+      <span id="msi-text">Söker efter GPS-position...</span>
+      <span class="expand-hint">▲</span>
+    </div>
+  </div>
+  <div id="sheet-body">
+    <div class="title-row">
+      <h2><span class="l10n" data-key="app-title"></span></h2>
+      <div class="sheet-lang">
+        <button class="lang-btn active" data-lang="sv">SV</button>
+        <button class="lang-btn" data-lang="en">EN</button>
+      </div>
+      <button class="toggle-btn" id="toggleSheet">🔼</button>
+    </div>
+
+
+
+    <div class="info-section">
+      <div class="section-header open" onclick="toggleSection(this)">
+        <span class="l10n" data-key="about-heading-mobile"></span>
+      </div>
+      <div class="section-body open">
+        <p class="l10n" data-key="about-text"></p>
+        <p class="l10n" data-key="about-uncertainty" style="font-weight:500;"></p>
+        <p class="l10n" data-key="about-freely"></p>
+        <p><a class="l10n" data-key="about-source-link" href="https://www.mjolby.se/bygga-bo-miljo/samhallsutveckling/aktuella-och-pagaende-projekt/fororenad-mark-utreds-vid-bockarp" target="_blank" rel="noopener"></a></p>
+      </div>
+    </div>
+
+
+
+    <div class="info-section">
+      <div class="section-header open" onclick="toggleSection(this)">
+        <span class="l10n" data-key="legend-heading-mobile"></span>
+      </div>
+      <div class="section-body open">
+        <div class="legend-mini">
+          <span class="legend-mini-item"><span class="lm-swatch" style="background:#dc3545;opacity:0.4;"></span> <span class="l10n" data-key="legend-zone-mobile"></span></span>
+          <span class="legend-mini-item"><span class="lm-dot" style="background:#dc3545;"></span> <span class="l10n" data-key="legend-inside-mobile"></span></span>
+          <span class="legend-mini-item"><span class="lm-dot" style="background:#28a745;"></span> <span class="l10n" data-key="legend-outside-mobile"></span></span>
+          <span class="legend-mini-item"><span class="lm-dot" style="background:#ffc107;"></span> <span class="l10n" data-key="legend-maybe-mobile"></span></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-footer">
+      <p style="margin:0;font-size:12px;font-weight:600;"><a class="l10n" data-key="github-link" href="https://github.com/Fronkan/contamination_map" target="_blank" rel="noopener"></a></p>
+    </div>
+  </div>
+</div>
 
 <script>
-const map = L.map('map').setView([59.3293, 18.0686], 13);
+// =============================================
+// Internationalization
+// =============================================
+const translations = {
+  'app-title': { sv: 'Föroreningskartan', en: 'Contamination Map' },
+  'app-subtitle': { sv: 'Se om du befinner dig inom ett område med känd markförorening från kommunens register.', en: "Check if you're inside an area with known soil contamination from municipal records." },
+  'your-position': { sv: 'Din position', en: 'Your position' },
+  'about-heading': { sv: 'Om det här verktyget', en: 'About this tool' },
+  'about-heading-mobile': { sv: 'ℹ️ Om verktyget', en: 'ℹ️ About this tool' },
+  'about-text': { sv: 'Under 2024 påbörjade Mjölby kommun markundersökningar vid den tidigare lerduveskjutbanan i Bockarp, där man funnit förhöjda halter av PAH (från lerduvor) och bly (från ammunition) i marken. Det här verktyget är ett privat sidoprojekt, skapat för att jag själv tyckte det var svårt att se var gränsen för det förorenade området gick. Projektet är <b>inte</b> utvecklat i samarbete med kommunen.', en: "In 2024, Mjölby municipality began soil investigations at the former clay pigeon shooting range in Bockarp, where elevated levels of PAH (from clay pigeons) and lead (from ammunition) were found in the soil. This tool is a personal side project, created because I found it difficult to tell where the boundary of the contaminated area was. It is <b>not</b> developed in collaboration with the municipality." },
+  'about-uncertainty': { sv: 'Områdesgränsen är baserad på en bild över kommunens områdesmarkering, inte på exakta GPS-koordinater. Det finns därför en viss osäkerhet i var gränsen går.', en: "The zone boundary is based on an image of the municipality's area marking, not on exact GPS coordinates. There is therefore some uncertainty about where the boundary lies." },
+  'about-freely': { sv: 'Kartan är fritt tillgänglig för den som vill använda den.', en: 'The map is freely available for anyone who wants to use it.' },
+  'about-source-link': { sv: '📄 Läs mer på Mjölby kommuns webbplats', en: '📄 Read more on Mjölby municipality website' },
+  'legend-heading': { sv: 'Teckenförklaring', en: 'Map legend' },
+  'legend-heading-mobile': { sv: '🗺️ Teckenförklaring', en: '🗺️ Map legend' },
+  'legend-zone': { sv: 'Föroreningszon (bly från lerduveskytte)', en: 'Contamination zone (lead from clay pigeon shooting)' },
+  'legend-inside': { sv: 'Din position — innanför zonen', en: 'Your position — inside the zone' },
+  'legend-outside': { sv: 'Din position — utanför zonen', en: 'Your position — outside the zone' },
+  'legend-maybe': { sv: 'Din position — osäker (GPS-cirkel nuddar zonen)', en: 'Your position — uncertain (GPS circle touches zone)' },
+  'legend-gps-circle': { sv: 'GPS-osäkerhetscirkel', en: 'GPS uncertainty circle' },
+  'legend-zone-mobile': { sv: 'Föroreningszon', en: 'Contamination zone' },
+  'legend-inside-mobile': { sv: 'Innanför', en: 'Inside' },
+  'legend-outside-mobile': { sv: 'Utanför', en: 'Outside' },
+  'legend-maybe-mobile': { sv: 'Osäker', en: 'Uncertain' },
+  'github-link': { sv: '💬 Rapportera problem eller bidra på GitHub', en: '💬 Report issues or contribute on GitHub' },
+};
 
-const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-  maxZoom: 19
+(function initL10n() {
+  const els = document.querySelectorAll('.l10n');
+  els.forEach(el => {
+    const key = el.dataset.key;
+    if (key && translations[key]) {
+      el._sv = translations[key].sv;
+      el._en = translations[key].en;
+      el.innerHTML = el._sv;
+    }
+  });
+
+  window.setLang = function(lang) {
+    els.forEach(el => {
+      const key = el.dataset.key;
+      if (key && translations[key]) {
+        el.innerHTML = lang === 'sv' ? translations[key].sv : translations[key].en;
+      }
+    });
+    currentLang = lang;
+    document.querySelectorAll('.lang-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.lang === lang);
+    });
+    updateUIForCurrentLang();
+  };
+})();
+
+let currentLang = 'sv';
+let lastPositionData = null;
+let lastError = null;
+
+// Shorthand translate helper
+function t(sv, en) { return currentLang === 'sv' ? sv : en; }
+
+document.querySelectorAll('.lang-btn').forEach(btn => {
+  btn.addEventListener('click', () => setLang(btn.dataset.lang));
 });
 
-const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-  attribution: '&copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
-  maxZoom: 19
-});
-
-osm.addTo(map);
-
-L.control.layers({ 'OpenStreetMap': osm, 'Satellite': satellite }).addTo(map);
-
-// Half-circle contaminated zone centered on an old shooting range ("lerduveskytte")
-const centerLat = 58.321467, centerLng = 15.159052;
-const radiusMeters = 225;
-const bearingDeg = 68;
-
-function generateHalfCircle(centerLat, centerLng, radius, bearing, segments) {
-  const R = 6371000;
-  const points = [];
-  for (let i = 0; i <= segments; i++) {
-    const angle = bearing - 90 + (180 / segments) * i;
-    const rad = angle * Math.PI / 180;
-    const lat = centerLat + (radius / R) * Math.cos(rad) * (180 / Math.PI);
-    const lng = centerLng + (radius / R) * Math.sin(rad) * (180 / Math.PI) / Math.cos(centerLat * Math.PI / 180);
-    points.push([lat, lng]);
-  }
-  points.push([centerLat, centerLng]);
-  return points;
+function toggleSection(el) {
+  el.classList.toggle('open');
+  const content = el.nextElementSibling;
+  if (content) content.classList.toggle('open');
 }
 
+// =============================================
+// Bottom sheet toggle (mobile)
+// =============================================
+const sheet = document.getElementById('bottom-sheet');
+const handle = document.getElementById('sheet-handle');
+const toggleBtn = document.getElementById('toggleSheet');
+let sheetExpanded = false;
+
+function expandSheet() { sheetExpanded = true; sheet.classList.add('expanded'); toggleBtn.textContent = '🔽'; }
+function collapseSheet() { sheetExpanded = false; sheet.classList.remove('expanded'); toggleBtn.textContent = '🔼'; }
+handle.addEventListener('click', () => sheetExpanded ? collapseSheet() : expandSheet());
+toggleBtn.addEventListener('click', (e) => { e.stopPropagation(); sheetExpanded ? collapseSheet() : expandSheet(); });
+
+// =============================================
+// Map (shared between desktop and mobile)
+// =============================================
+const map = L.map('map').setView([58.321467, 15.159052], 14);
+const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>', maxZoom: 19
+});
+const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  attribution: '&copy; Esri', maxZoom: 19
+});
+osm.addTo(map);
+L.control.layers({ 'OpenStreetMap': osm, 'Satellite': satellite }).addTo(map);
+
+// ---- Zone ----
+const centerLat = 58.321467, centerLng = 15.159052, radiusMeters = 225, bearingDeg = 68;
+function generateHalfCircle(lat, lng, r, b, seg) {
+  const R = 6371000; const pts = [];
+  for (let i = 0; i <= seg; i++) {
+    const a = b - 90 + (180 / seg) * i; const rad = a * Math.PI / 180;
+    pts.push([lat + (r / R) * Math.cos(rad) * (180 / Math.PI), lng + (r / R) * Math.sin(rad) * (180 / Math.PI) / Math.cos(lat * Math.PI / 180)]);
+  }
+  pts.push([lat, lng]); return pts;
+}
 const areaCoords = generateHalfCircle(centerLat, centerLng, radiusMeters, bearingDeg, 40);
+L.polygon(areaCoords, { color: '#dc3545', fillColor: '#dc3545', fillOpacity: 0.25, weight: 2.5 }).addTo(map);
 
-const contaminationPolygon = L.polygon(areaCoords, {
-  color: '#dc3545',
-  fillColor: '#dc3545',
-  fillOpacity: 0.25,
-  weight: 2.5
-}).addTo(map);
-
-map.setView([centerLat, centerLng], 14);
-
+// ---- GPS helpers ----
 function pointInPolygon(lat, lng, polygon) {
   let inside = false;
-  const n = polygon.length;
-  for (let i = 0, j = n - 1; i < n; j = i++) {
-    const xi = polygon[i][1], yi = polygon[i][0];
-    const xj = polygon[j][1], yj = polygon[j][0];
-    if ((yi > lat) !== (yj > lat) && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) {
-      inside = !inside;
-    }
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i][1], yi = polygon[i][0], xj = polygon[j][1], yj = polygon[j][0];
+    if ((yi > lat) !== (yj > lat) && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
   }
   return inside;
 }
-
-let userMarker = null;
-let userCircle = null;
-
 function uncertaintyOverlapsZone(lat, lng, accuracy, polygon) {
-  const samples = 12;
-  for (let i = 0; i < samples; i++) {
-    const angle = (360 / samples) * i * Math.PI / 180;
+  for (let i = 0; i < 12; i++) {
+    const angle = (360 / 12) * i * Math.PI / 180;
     const dlat = (accuracy / 6371000) * Math.cos(angle) * (180 / Math.PI);
     const dlng = (accuracy / 6371000) * Math.sin(angle) * (180 / Math.PI) / Math.cos(lat * Math.PI / 180);
     if (pointInPolygon(lat + dlat, lng + dlng, polygon)) return true;
@@ -105,72 +506,125 @@ function uncertaintyOverlapsZone(lat, lng, accuracy, polygon) {
   return false;
 }
 
+let userMarker = null, userCircle = null;
+
 function updatePosition(pos) {
-  const { latitude, accuracy } = pos.coords;
-  const { longitude } = pos.coords;
+  lastPositionData = pos; lastError = null;
+  const { latitude, longitude, accuracy } = pos.coords;
   const inside = pointInPolygon(latitude, longitude, areaCoords);
   const mightBeInside = !inside && uncertaintyOverlapsZone(latitude, longitude, accuracy, areaCoords);
 
-  const statusEl = document.getElementById('status');
-  const coordsEl = document.getElementById('coords');
+  const iconColor = inside ? '#dc3545' : mightBeInside ? '#ffc107' : '#28a745';
 
-  let statusText, statusClass;
+  // --- Update floating banner (always visible) ---
+  const banner = document.getElementById('float-banner');
+
+  // --- Update desktop UI ---
+  const deskCard = document.getElementById('desktopStatusCard');
+  const deskSub = document.getElementById('desktopStatusSub');
+
+
+  let dCls, dLabel, dSub, bCls, bLabel, mCls;
   if (inside) {
-    statusText = 'YOU ARE INSIDE THE CONTAMINATED AREA';
-    statusClass = 'status-inside';
+    dCls = 'status-inside';
+    dLabel = t('DU ÄR INNANFÖR DET FÖRORENADE OMRÅDET', 'YOU ARE INSIDE THE CONTAMINATED AREA');
+    dSub = t('Du befinner dig i zonen. Undvik att gräva eller odla här.', 'You are in the zone. Avoid digging or gardening here.');
+    bCls = 'fb-inside'; bLabel = dLabel;
+    mCls = 'msi-inside';
   } else if (mightBeInside) {
-    statusText = 'You might be inside the contaminated area (GPS uncertainty overlaps the zone)';
-    statusClass = 'status-maybe';
+    dCls = 'status-maybe';
+    dLabel = t('Du kan vara innanför området', 'You might be inside the area');
+    dSub = t('GPS-osäkerheten nuddar zonen. Förflytta dig för en säkrare läsning.', 'GPS uncertainty touches the zone. Move for a more reliable reading.');
+    bCls = 'fb-maybe'; bLabel = dLabel;
+    mCls = 'msi-maybe';
   } else {
-    statusText = 'You are outside the contaminated area';
-    statusClass = 'status-outside';
+    dCls = 'status-outside';
+    dLabel = t('Du är utanför det förorenade området', 'You are outside the contaminated area');
+    dSub = t('Din position är utanför zonen med god marginal.', 'Your position is safely outside the zone.');
+    bCls = 'fb-outside'; bLabel = dLabel;
+    mCls = 'msi-outside';
   }
+  banner.className = bCls;
+  banner.textContent = bLabel;
+  deskCard.className = 'status-card ' + dCls;
+  deskCard.querySelector('.l10n').textContent = dLabel;
+  deskSub.textContent = dSub;
 
-  statusEl.textContent = statusText;
-  statusEl.className = 'status-bar ' + statusClass;
+  // --- Update mobile UI (same text as desktop) ---
+  const mInline = document.getElementById('mobile-status-inline');
+  mInline.className = mCls;
+  document.getElementById('msi-text').textContent = dLabel;
 
-  coordsEl.textContent = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}  ±${accuracy.toFixed(0)}m`;
-
+  // --- Update map markers ---
   if (userMarker) map.removeLayer(userMarker);
   if (userCircle) map.removeLayer(userCircle);
-
-  const iconColor = inside ? '#dc3545' : mightBeInside ? '#ffc107' : '#28a745';
   userMarker = L.marker([latitude, longitude], {
     icon: L.divIcon({
-      className: '',
-      html: `<div style="width:20px;height:20px;background:${iconColor};border:3px solid #fff;border-radius:50%;box-shadow:0 0 6px rgba(0,0,0,0.4);"></div>`,
-      iconSize: [20, 20],
-      iconAnchor: [10, 10]
+      className: '', html: `<div style="width:20px;height:20px;background:${iconColor};border:3px solid #fff;border-radius:50%;box-shadow:0 0 6px rgba(0,0,0,0.4);"></div>`,
+      iconSize: [20, 20], iconAnchor: [10, 10]
     })
   }).addTo(map);
-
-  userCircle = L.circle([latitude, longitude], {
-    radius: accuracy,
-    color: iconColor,
-    fillColor: iconColor,
-    fillOpacity: 0.1,
-    weight: 1.5
-  }).addTo(map);
+  userCircle = L.circle([latitude, longitude], { radius: accuracy, color: iconColor, fillColor: iconColor, fillOpacity: 0.1, weight: 1.5 }).addTo(map);
 }
 
 function handleError(err) {
-  const statusEl = document.getElementById('status');
-  statusEl.textContent = 'Could not get GPS position: ' + err.message;
-  statusEl.className = 'status-bar status-error';
+  lastError = err; lastPositionData = null;
+  const msg = t('Kunde inte hämta GPS-position: ', 'Could not get GPS position: ') + err.message;
+
+  const banner = document.getElementById('float-banner');
+  banner.className = 'fb-pending';
+  banner.textContent = msg;
+
+  const deskCard = document.getElementById('desktopStatusCard');
+  deskCard.className = 'status-card status-pending';
+  deskCard.querySelector('.l10n').textContent = msg;
+
+  document.getElementById('mobile-status-inline').className = 'msi-pending';
+  document.getElementById('msi-text').textContent = msg;
 }
-
-
 
 if ('geolocation' in navigator) {
-  navigator.geolocation.watchPosition(updatePosition, handleError, {
-    enableHighAccuracy: true,
-    timeout: 15000,
-    maximumAge: 5000
-  });
+  navigator.geolocation.watchPosition(updatePosition, handleError, { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 });
 } else {
-  document.getElementById('status').textContent = 'Geolocation is not supported by this browser';
-  document.getElementById('status').className = 'status-bar status-error';
+  const msg = t('Geolokalisering stöds inte i denna webbläsare', 'Geolocation is not supported by this browser');
+  document.getElementById('float-banner').textContent = msg;
+  document.querySelector('#desktopStatusCard .l10n').textContent = msg;
+  document.getElementById('msi-text').textContent = msg;
 }
+
+// =============================================
+// Re-evaluate dynamic status UI for current language
+// =============================================
+function updateUIForCurrentLang() {
+  if (lastPositionData) {
+    updatePosition(lastPositionData);
+  } else if (lastError) {
+    handleError(lastError);
+  } else {
+    // Pending state — no position yet
+    const pendingText = t('Söker efter GPS-position...', 'Searching for GPS position...');
+    const banner = document.getElementById('float-banner');
+    banner.className = 'fb-pending';
+    banner.textContent = pendingText;
+
+    const deskCard = document.getElementById('desktopStatusCard');
+    if (deskCard) {
+      deskCard.className = 'status-card status-pending';
+      const label = deskCard.querySelector('.l10n');
+      if (label) label.textContent = pendingText;
+    }
+
+    const msi = document.getElementById('mobile-status-inline');
+    if (msi) {
+      msi.className = 'msi-pending';
+      const msiText = document.getElementById('msi-text');
+      if (msiText) msiText.textContent = pendingText;
+    }
+  }
+}
+
+// Sync the initial pending state with the current language
+updateUIForCurrentLang();
 </script>
 </body>
 </html>
